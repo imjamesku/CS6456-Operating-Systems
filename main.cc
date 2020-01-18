@@ -11,7 +11,7 @@
 #include <fstream>
 #include <fcntl.h>
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG 
 #define D(x) x
 #else 
@@ -143,6 +143,10 @@ void parse_and_run_command(const std::string &command) {
         // input redirection
         if (commandOjb.getInput() != "") {
             int in = open(commandOjb.getInput().c_str(), O_RDONLY);
+            if (in == -1) {
+                perror("ERROR");
+                exit(1);
+            }
             dup2(in, 0);
             close(in);
         }
