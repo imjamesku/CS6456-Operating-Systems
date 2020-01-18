@@ -11,7 +11,7 @@
 #include <fstream>
 #include <fcntl.h>
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG 
 #define D(x) x
 #else 
@@ -37,6 +37,8 @@ public:
     ~Command();
 
     std::string getOutput();
+
+    std::string getInput();
 
     std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens);
 
@@ -72,6 +74,10 @@ std::vector<char*> Command::stringVectorToCharPtrVector(std::vector<std::string>
 
 std::string Command::getOutput() {
     return this->output;
+}
+
+std::string Command::getInput() {
+    return this->input;
 }
 
 std::vector<char*> Command::getArgs() {
@@ -128,12 +134,17 @@ void parse_and_run_command(const std::string &command) {
     if (pid == 0){
         //child
         D(std::cout << "I'm the child\n";)
+        // output redicetion
         if (commandOjb.getOutput() != "") {
-            // std::fstream fs;
-            // fs.open(commandOjb.getOutput());
-            int out = open("out", O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+            int out = open(commandOjb.getOutput().c_str(), O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
             dup2(out, 1);
             close(out);
+        }
+        // input redirection
+        if (commandOjb.getInput() != "") {
+            int in = open(commandOjb.getInput().c_str(), O_RDONLY);
+            dup2(in, 0);
+            close(in);
         }
         execve(args[0], args.data(), NULL);
         // print the error
@@ -148,7 +159,9 @@ void parse_and_run_command(const std::string &command) {
         int status;
         waitpid(pid, &status, 0);
         D(std::cout << "done waiting" << std::endl;)
-        D(std::cout << "status:" << status << std::endl;)
+        if (WIFEXITED(status)) {
+            std::cout << "exit status: " << WEXITSTATUS(status) << std::endl;
+        }
     }
     // std::cerr << "Not implemented.\n";
 }
@@ -184,7 +197,7 @@ bool processCommand(
     output = "";
 
     for(std::size_t i=0; i<tokens.size(); i++) {
-        std::cout << "i:" << i << "token: "<< tokens[i] << '\n';
+        D(std::cout << "i:" << i << "token: "<< tokens[i] << '\n';)
         if (tokens[i] == "|") {
             return false;
         }
