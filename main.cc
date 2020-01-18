@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -7,6 +8,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <algorithm>
+#include <fstream>
+#include <fcntl.h>
 
 #define DEBUG
 #ifdef DEBUG 
@@ -32,6 +35,8 @@ public:
         std::string input="",
         std::string output="");
     ~Command();
+
+    std::string getOutput();
 
     std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens);
 
@@ -65,6 +70,10 @@ std::vector<char*> Command::stringVectorToCharPtrVector(std::vector<std::string>
     return charPtrs;
 }
 
+std::string Command::getOutput() {
+    return this->output;
+}
+
 std::vector<char*> Command::getArgs() {
     return this->args;
 }
@@ -73,6 +82,8 @@ std::vector<char*> Command::getArgs() {
 
 std::vector<std::string> split(const std::string &s);
 std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens);
+bool isOperator(std::string s);
+
 bool processCommand(
     std::vector<std::string> &tokens,
     std::string &input,
@@ -87,7 +98,7 @@ void parse_and_run_command(const std::string &command) {
     std::vector<std::string> tokens = split(command);
     std::string input = "", output = "";
     if (!processCommand(tokens, input, output)) {
-        std::cout << "invalid command\n";
+        std::cerr << "invalid command\n";
         return;
     }
     Command commandOjb(command, tokens, input, output);
@@ -117,6 +128,13 @@ void parse_and_run_command(const std::string &command) {
     if (pid == 0){
         //child
         D(std::cout << "I'm the child\n";)
+        if (commandOjb.getOutput() != "") {
+            // std::fstream fs;
+            // fs.open(commandOjb.getOutput());
+            int out = open("out", O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+            dup2(out, 1);
+            close(out);
+        }
         execve(args[0], args.data(), NULL);
         // print the error
         perror("ERROR");
@@ -154,7 +172,9 @@ std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens)
     charPtrs.push_back((char*)0);
     return charPtrs;
 }
-
+bool isOperator(std::string s) {
+    return s == "<" || s == ">" || s == "|";
+}
 // Checks if the command is valid
 bool processCommand(
     std::vector<std::string> &tokens,
@@ -164,16 +184,19 @@ bool processCommand(
     output = "";
 
     for(std::size_t i=0; i<tokens.size(); i++) {
-        // output
+        std::cout << "i:" << i << "token: "<< tokens[i] << '\n';
+        if (tokens[i] == "|") {
+            return false;
+        }
         if (tokens[i] == ">") {
-            if (i+1 < tokens.size() && output == "") {
+            if (i+1 < tokens.size() && output == "" && !isOperator(tokens[i+1])) {
                 output = tokens[i+1];
                 tokens[i] = tokens[i+1] = "";
             } else {
                 return false;
             }
         } else if (tokens[i] == "<") {
-            if (i+1 < tokens.size() && input == "") {
+            if (i+1 < tokens.size() && input == "" && !isOperator(tokens[i+1])) {
                 input = tokens[i+1];
                 tokens[i] = tokens[i+1] = "";
             } else {
@@ -182,7 +205,7 @@ bool processCommand(
         }
     }
     tokens.erase(std::remove(tokens.begin(), tokens.end(), ""), tokens.end());
-    return true;
+    return tokens.size() > 0;
 }
 
 int main(void) {
