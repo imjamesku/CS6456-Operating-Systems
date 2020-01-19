@@ -11,6 +11,9 @@
 #include <fstream>
 #include <fcntl.h>
 
+#include "Command.h"
+#include "State.h"
+
 // #define DEBUG
 #ifdef DEBUG 
 #define D(x) x
@@ -18,124 +21,21 @@
 #define D(x)
 #endif
 
-class State
-{
-private:
-    int status;
-    std::string lastCommandOutput;
-public:
-    State(/* args */);
-    ~State();
-    void setStatus(int status);
-    int getStatus();
-    void setLastCommandOutput(std::string output);
-    std::string getLastCommandOutput();
-};
-
-State::State(/* args */)
-{
-}
-
-State::~State()
-{
-}
-
-void State::setStatus(int status) {
-    this->status = status;
-}
-int State::getStatus() {
-    return this->status;
-}
-void State::setLastCommandOutput(std::string output) {
-    this->lastCommandOutput = output;
-}
-
-std::string State::getLastCommandOutput() {
-    return this->lastCommandOutput;
-}
-
-class Command
-{
-private:
-    /* data */
-    std::string input;
-    std::string output;
-    std::string cmdString;
-    std::vector<std::string> tokens;
-    std::vector<char*> args;
-    
-public:
-    Command(
-        const std::string &command,
-        std::vector<std::string> tokens,
-        std::string input="",
-        std::string output="");
-    ~Command();
-
-    std::string getOutput();
-
-    std::string getInput();
-
-    std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens);
-
-    std::vector<char*> getArgs();
-
-};
-
-Command::Command(
-    const std::string &command,
-    std::vector<std::string> tokens,
-    std::string input,
-    std::string output)
-{
-    this->tokens = tokens;
-    this->cmdString = command;
-    this->input = input;
-    this->output = output;
-    this->args = stringVectorToCharPtrVector(this->tokens);
-}
-
-Command::~Command()
-{
-}
-
-std::vector<char*> Command::stringVectorToCharPtrVector(std::vector<std::string> &tokens) {
-    std::vector<char*> charPtrs;
-    for (unsigned int i=0; i<tokens.size(); i++) {
-        charPtrs.push_back(&tokens[i][0]);
-    }
-    charPtrs.push_back((char*)0);
-    return charPtrs;
-}
-
-std::string Command::getOutput() {
-    return this->output;
-}
-
-std::string Command::getInput() {
-    return this->input;
-}
-
-std::vector<char*> Command::getArgs() {
-    return this->args;
-}
-
-
-
+// Function declarations
 std::vector<std::string> split(const std::string &s);
 std::vector<std::string> split(const std::string &s, const std::string delimiter);
 std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens);
 bool isOperator(std::string s);
-
-
 bool processCommand(
     std::vector<std::string> &tokens,
     std::string &input,
     std::string &output);
-
 void parse_and_run_command(const std::string &command, State &state);
 void parse_and_run_single_command(const std::string &command, State &state, int in, int out);
 
+// Function definitions
+
+// Runs a series of pipes.
 void parse_and_run_command(const std::string &command, State &state) {
     // TODO: Implement this.
     // Note that this is not the correct way to test for the exit command.
@@ -174,7 +74,7 @@ void parse_and_run_command(const std::string &command, State &state) {
     
 }
 
-
+// Runs a single pipe
 void parse_and_run_single_command(const std::string &command, State &state, int in, int out) {
     // TODO: Implement this.
     // Note that this is not the correct way to test for the exit command.
@@ -335,6 +235,7 @@ std::vector<std::string> split(const std::string &s, const std::string delimiter
     return tokens;
 }
 
+// Converts a vector of strings to a vector of char pointers.
 std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens) {
     std::vector<char*> charPtrs;
     for (unsigned int i=0; i<tokens.size(); i++) {

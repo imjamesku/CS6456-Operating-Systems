@@ -3,7 +3,7 @@ CXXFLAGS = -Wall -pedantic -O2 -g -std=c++11
 
 all: uvash
 
-uvash: main.o
+uvash: main.o Command.o State.o
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 clean:
