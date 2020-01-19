@@ -18,6 +18,33 @@
 #define D(x)
 #endif
 
+class State
+{
+private:
+    int status;
+public:
+    State(/* args */);
+    ~State();
+    void setStatus(int status);
+    int getStatus();
+};
+
+State::State(/* args */)
+{
+}
+
+State::~State()
+{
+}
+
+void State::setStatus(int status) {
+    this->status = status;
+}
+int State::getStatus() {
+    return this->status;
+}
+
+
 class Command
 {
 private:
@@ -97,10 +124,10 @@ bool processCommand(
     std::string &input,
     std::string &output);
 
-void parse_and_run_command(const std::string &command);
-void parse_and_run_single_command(const std::string &command, int in, int out);
+void parse_and_run_command(const std::string &command, State &state);
+void parse_and_run_single_command(const std::string &command, State &state, int in, int out);
 
-void parse_and_run_command(const std::string &command) {
+void parse_and_run_command(const std::string &command, State &state) {
     // TODO: Implement this.
     // Note that this is not the correct way to test for the exit command.
     // For example the command `exit` should also exit your shell.
@@ -116,12 +143,14 @@ void parse_and_run_command(const std::string &command) {
     int* newFdPtr = newFd;
     for (size_t i=0; i<commands.size(); i++) {
         pipe(newFdPtr);
+
         D(std::cout << "oldFldPtr[0]:" << oldFdPtr[0] << " oldFdPtr[1]:" << oldFdPtr[1] << std::endl;)
         D(std::cout << "newFldPtr[0]:" << newFdPtr[0] << " newFdPtr[1]:" << newFdPtr[1] << std::endl;)
+
         in = i == 0 ? 0 : oldFdPtr[0];
         out = i == commands.size()-1 ? 1 : newFdPtr[1];
         
-        parse_and_run_single_command(commands[i], in, out);
+        parse_and_run_single_command(commands[i], state, in, out);
         if (i != 0) {
             close(oldFdPtr[0]);
         }
@@ -137,13 +166,21 @@ void parse_and_run_command(const std::string &command) {
 }
 
 
-void parse_and_run_single_command(const std::string &command, int in, int out) {
+void parse_and_run_single_command(const std::string &command, State &state, int in, int out) {
     // TODO: Implement this.
     // Note that this is not the correct way to test for the exit command.
     // For example the command `exit` should also exit your shell.
+    if (command == "exit") {
+        exit(0);
+    } else if (command == "status") {
+        std::cout << "Status: " << state.getStatus() << std::endl;
+        return;
+    }
+
     D(std::cout << "command length: " << command.length() << std::endl;)
     D(std::cout << "in: " << in << ", out: " << out << std::endl;)
     // Parse the command line
+
     std::vector<std::string> tokens = split(command);
     std::string input = "", output = "";
     if (!processCommand(tokens, input, output)) {
@@ -152,27 +189,19 @@ void parse_and_run_single_command(const std::string &command, int in, int out) {
     }
     Command commandOjb(command, tokens, input, output);
 
-    // std::vector<char*> args = stringVectorToCharPtrVector(tokens);
     std::vector<char*> args = commandOjb.getArgs();
 
     D(
-    std::cout << "args:";
-    for (unsigned int i=0; i<tokens.size(); i++) {
-        std::cout << args[i] << ' ';
-    }
-    std::cout << '\n';
+        std::cout << "args:";
+        for (unsigned int i=0; i<tokens.size(); i++) {
+            std::cout << args[i] << ' ';
+        }
+        std::cout << '\n';
     )
-    
-
-    if (command == "exit") {
-        exit(0);
-    }
-    // int err = execve(args[0], args.data(), NULL);
-    // return;
 
     std::cout.flush();
     pid_t pid = fork();
-    // std::cout << "pid:" << pid << '\n';
+
     if (pid < 0) {
         std::cerr << "fork failed\n";
         return;
@@ -187,6 +216,8 @@ void parse_and_run_single_command(const std::string &command, int in, int out) {
             close(fOut);
         } else if (out != 1){
             dup2(out, 1);
+        }
+        if (out != 1) {
             close(out);
         }
         // input redirection
@@ -199,11 +230,15 @@ void parse_and_run_single_command(const std::string &command, int in, int out) {
             dup2(fIn, 0);
             close(fIn);
         } else if (in != 0) {
+            // No redirection specified. Direct to the next pipe
             dup2(in, 0);
+        }
+        if (in != 0) {
             close(in);
         }
         
         execve(args[0], args.data(), NULL);
+        // If the program reaches here, execve has failed. Otherwise the process would've been replaced.
         // print the error
         perror("ERROR");
         D(std::cout << "Did not execute\n";)
@@ -216,8 +251,16 @@ void parse_and_run_single_command(const std::string &command, int in, int out) {
         int status;
         waitpid(pid, &status, 0);
         D(std::cout << "done waiting" << std::endl;)
+        // Set status
         if (WIFEXITED(status)) {
+            if (WEXITSTATUS(status) == 0) {
+                state.setStatus(0);
+            } else {
+                state.setStatus(255);
+            }
             std::cout << "exit status: " << WEXITSTATUS(status) << std::endl;
+        } else {
+            state.setStatus(255);
         }
     }
     // std::cerr << "Not implemented.\n";
@@ -299,11 +342,12 @@ bool processCommand(
 }
 
 int main(void) {
+    State state;
     while (true) {
         std::string command;
         std::cout << "> ";
         std::getline(std::cin, command);
-        parse_and_run_command(command);
+        parse_and_run_command(command, state);
     }
     return 0;
 }
