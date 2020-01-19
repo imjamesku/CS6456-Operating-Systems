@@ -11,7 +11,7 @@
 #include <fstream>
 #include <fcntl.h>
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG 
 #define D(x) x
 #else 
@@ -87,19 +87,62 @@ std::vector<char*> Command::getArgs() {
 
 
 std::vector<std::string> split(const std::string &s);
+std::vector<std::string> split(const std::string &s, const std::string delimiter);
 std::vector<char*> stringVectorToCharPtrVector(std::vector<std::string> &tokens);
 bool isOperator(std::string s);
+
 
 bool processCommand(
     std::vector<std::string> &tokens,
     std::string &input,
     std::string &output);
 
+void parse_and_run_command(const std::string &command);
+void parse_and_run_single_command(const std::string &command, int in, int out);
+
 void parse_and_run_command(const std::string &command) {
     // TODO: Implement this.
     // Note that this is not the correct way to test for the exit command.
     // For example the command `exit` should also exit your shell.
+    std::vector<std::string> commands = split(command, " | ");
+    D(std::cout << "number of commands" << commands.size() << std::endl;)
+    if (commands.size() == 0) {
+        std::cerr << "invalid command" << std::endl;
+    }
+    int in = 0, out = 1;
+    int oldFd[2];
+    int newFd[2];
+    int* oldFdPtr = oldFd;
+    int* newFdPtr = newFd;
+    for (size_t i=0; i<commands.size(); i++) {
+        pipe(newFdPtr);
+        D(std::cout << "oldFldPtr[0]:" << oldFdPtr[0] << " oldFdPtr[1]:" << oldFdPtr[1] << std::endl;)
+        D(std::cout << "newFldPtr[0]:" << newFdPtr[0] << " newFdPtr[1]:" << newFdPtr[1] << std::endl;)
+        in = i == 0 ? 0 : oldFdPtr[0];
+        out = i == commands.size()-1 ? 1 : newFdPtr[1];
+        
+        parse_and_run_single_command(commands[i], in, out);
+        if (i != 0) {
+            close(oldFdPtr[0]);
+        }
+        close(newFdPtr[1]);
+        int* temp = oldFdPtr;
+        oldFdPtr = newFdPtr;
+        newFdPtr = temp;
+    }
+    close(oldFdPtr[0]);
+    // close(newFdPtr[1]);
+    // close(newFdPtr[0]);
+    
+}
 
+
+void parse_and_run_single_command(const std::string &command, int in, int out) {
+    // TODO: Implement this.
+    // Note that this is not the correct way to test for the exit command.
+    // For example the command `exit` should also exit your shell.
+    D(std::cout << "command length: " << command.length() << std::endl;)
+    D(std::cout << "in: " << in << ", out: " << out << std::endl;)
     // Parse the command line
     std::vector<std::string> tokens = split(command);
     std::string input = "", output = "";
@@ -130,26 +173,36 @@ void parse_and_run_command(const std::string &command) {
     std::cout.flush();
     pid_t pid = fork();
     // std::cout << "pid:" << pid << '\n';
-
+    if (pid < 0) {
+        std::cerr << "fork failed\n";
+        return;
+    }
     if (pid == 0){
         //child
         D(std::cout << "I'm the child\n";)
         // output redicetion
         if (commandOjb.getOutput() != "") {
-            int out = open(commandOjb.getOutput().c_str(), O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+            int fOut = open(commandOjb.getOutput().c_str(), O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
+            dup2(fOut, 1);
+            close(fOut);
+        } else if (out != 1){
             dup2(out, 1);
             close(out);
         }
         // input redirection
         if (commandOjb.getInput() != "") {
-            int in = open(commandOjb.getInput().c_str(), O_RDONLY);
-            if (in == -1) {
+            int fIn = open(commandOjb.getInput().c_str(), O_RDONLY);
+            if (fIn == -1) {
                 perror("ERROR");
                 exit(1);
             }
+            dup2(fIn, 0);
+            close(fIn);
+        } else if (in != 0) {
             dup2(in, 0);
             close(in);
         }
+        
         execve(args[0], args.data(), NULL);
         // print the error
         perror("ERROR");
@@ -170,6 +223,7 @@ void parse_and_run_command(const std::string &command) {
     // std::cerr << "Not implemented.\n";
 }
 
+// Split the input command with space, tab or \n
 std::vector<std::string> split(const std::string &s) {
     std::vector<std::string> tokens;
     std::istringstream iss(s);
@@ -177,6 +231,25 @@ std::vector<std::string> split(const std::string &s) {
     while (iss >> token) {
         D(std::cout << "token:" << token << std::endl;)
         tokens.push_back(token);
+    }
+    return tokens;
+}
+
+// Split the input command with delimiters
+std::vector<std::string> split(const std::string &s, const std::string delimiter) {
+    std::vector<std::string> tokens;
+    std::string token;
+
+    auto start = 0U;
+    auto end = s.find(delimiter);
+    while (end != std::string::npos)
+    {
+        tokens.push_back(s.substr(start, end - start));
+        start = end + delimiter.length();
+        end = s.find(delimiter, start);
+    }
+    if(s.substr(start, end).length() > 0){
+        tokens.push_back(s.substr(start, end));
     }
     return tokens;
 }
