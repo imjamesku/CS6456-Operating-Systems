@@ -22,11 +22,14 @@ class State
 {
 private:
     int status;
+    std::string lastCommandOutput;
 public:
     State(/* args */);
     ~State();
     void setStatus(int status);
     int getStatus();
+    void setLastCommandOutput(std::string output);
+    std::string getLastCommandOutput();
 };
 
 State::State(/* args */)
@@ -43,7 +46,13 @@ void State::setStatus(int status) {
 int State::getStatus() {
     return this->status;
 }
+void State::setLastCommandOutput(std::string output) {
+    this->lastCommandOutput = output;
+}
 
+std::string State::getLastCommandOutput() {
+    return this->lastCommandOutput;
+}
 
 class Command
 {
@@ -175,6 +184,9 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
     } else if (command == "status") {
         std::cout << "Status: " << state.getStatus() << std::endl;
         return;
+    } else if (command == "print") {
+        std::cout << state.getLastCommandOutput();
+        return;
     }
 
     D(std::cout << "command length: " << command.length() << std::endl;)
@@ -187,6 +199,15 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
         std::cerr << "invalid command\n";
         return;
     }
+    // pipe for child process to pass output to parent
+    int stdFd[2];
+    pipe(stdFd);
+    if (stdFd[0] == -1 || stdFd[1] == -1) {
+        std::cerr << "pipe failed\n";
+        return;
+    }
+    char buffer[4096];
+
     Command commandOjb(command, tokens, input, output);
 
     std::vector<char*> args = commandOjb.getArgs();
@@ -200,6 +221,7 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
     )
 
     std::cout.flush();
+    // Spawn a new child process
     pid_t pid = fork();
 
     if (pid < 0) {
@@ -209,6 +231,7 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
     if (pid == 0){
         //child
         D(std::cout << "I'm the child\n";)
+        close(stdFd[0]);
         // output redicetion
         if (commandOjb.getOutput() != "") {
             int fOut = open(commandOjb.getOutput().c_str(), O_WRONLY | O_TRUNC | O_CREAT, S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR);
@@ -216,7 +239,10 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
             close(fOut);
         } else if (out != 1){
             dup2(out, 1);
+        } else {
+            dup2(stdFd[1], 1);
         }
+        close(stdFd[1]);
         if (out != 1) {
             close(out);
         }
@@ -248,13 +274,24 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
         //parent
         D(std::cout << "I'm the parent" << std::endl;)
         D(std:: cout << "child pid: " << pid << std::endl;)
+        close(stdFd[1]);
         int status;
+        // Wait for child process to finish
         waitpid(pid, &status, 0);
         D(std::cout << "done waiting" << std::endl;)
         // Set status
         if (WIFEXITED(status)) {
             if (WEXITSTATUS(status) == 0) {
                 state.setStatus(0);
+                if (out == 1) {
+                    std::string output = "";
+                    while (size_t bytesRead = read(stdFd[0], buffer, 4096)) {
+                        output += std::string(buffer);
+                        write(1, buffer, bytesRead);
+                    }
+                    state.setLastCommandOutput(output);
+                    
+                }
             } else {
                 state.setStatus(255);
             }
@@ -262,6 +299,7 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
         } else {
             state.setStatus(255);
         }
+        close(stdFd[0]);
     }
     // std::cerr << "Not implemented.\n";
 }
