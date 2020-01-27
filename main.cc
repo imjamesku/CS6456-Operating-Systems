@@ -74,6 +74,12 @@ void parse_and_run_command(const std::string &command, State &state) {
     
 }
 
+void resetBuffer(char buffer[], int length) {
+    for (int i=0; i < length; i++) {
+        buffer[i] = '\0';
+    }
+}
+
 // Runs a single pipe
 void parse_and_run_single_command(const std::string &command, State &state, int in, int out) {
     // TODO: Implement this.
@@ -86,6 +92,7 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
         return;
     } else if (command == "print") {
         std::cout << state.getLastCommandOutput();
+        D(std::cout << "length: " << state.getLastCommandOutput().length();)
         return;
     }
 
@@ -106,7 +113,7 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
         std::cerr << "pipe failed\n";
         return;
     }
-    char buffer[4096];
+    char buffer[4096] = {0};
 
     Command commandOjb(command, tokens, input, output);
 
@@ -186,16 +193,20 @@ void parse_and_run_single_command(const std::string &command, State &state, int 
                 if (out == 1) {
                     std::string output = "";
                     while (size_t bytesRead = read(stdFd[0], buffer, 4096)) {
-                        output += std::string(buffer);
-                        write(1, buffer, bytesRead);
+                        std::string bufferString = std::string(buffer);
+                        bufferString.erase(std::remove(bufferString.begin(), bufferString.end(), '\x04'), bufferString.end());
+                        output += bufferString;
+                        // write(1, buffer, bytesRead);
+                        D(std::cout << "bytes read: " << bytesRead << std::endl;)
+                        resetBuffer(buffer, 4096);
                     }
                     state.setLastCommandOutput(output);
                     
                 }
             } else {
-                state.setStatus(255);
+                state.setStatus(WEXITSTATUS(status));
             }
-            std::cout << "exit status: " << WEXITSTATUS(status) << std::endl;
+            // std::cout << "exit status: " << WEXITSTATUS(status) << std::endl;
         } else {
             state.setStatus(255);
         }
