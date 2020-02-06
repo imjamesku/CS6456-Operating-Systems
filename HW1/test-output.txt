@@ -1,0 +1,55 @@
+python3 shell_test.py
+Passed test exit immediately
+Passed test empty command is invalid
+Passed test empty command is invalid, even with whitespace
+Passed test trivial command
+Passed test trivial command, exit status 0
+Passed test trivial command with extra space, exit status 0
+Passed test trivial command with extra tab, exit status 0
+Passed test trivial command with extra vertical tab, exit status 0
+Passed test trivial command, exit status 1
+Passed test only redirections is invalid
+Passed test redirection to nothing is invalid
+Passed test redirection from nothing is invalid
+Passed test pass arguments
+Passed test " is not quote
+Passed test varying argument counts and lengths
+Passed test varing command lengths (1)
+Passed test varing command lengths (2)
+Passed test very long argument
+Passed test lots of arguments
+Passed test extra whitespace without redirects
+Passed test redirections require whitespace around >
+Passed test redirections require whitespace around <
+Passed test >> is not a redirection operator
+Passed test redirect stdin inode
+Passed test redirect stdin contents
+Passed test simple pipe output
+Passed test simple pipe exit status
+Passed test longer pipeline output
+Passed test longer pipeline exit status (all 0s)
+Passed test pipeline with two exit status 1s and one 0 has 1s
+Passed test pipeline with two exit status 1s and one 0 has 0
+Passed test fork fails
+Passed test fork fails in a pipeline 
+Passed test |s without spaces is not a pipeline
+Passed test |s without spaces mixed with | with spaces (output)
+Passed test |s without spaces mixed with | with spaces (exit status)
+Passed test exec fails
+Passed test redirect stdout
+Passed test redirect stdout no print
+Passed test redirect stdout does not redirect stderr
+Passed test redirect in middle of command
+Passed test redirect at beginning of command
+Passed test extra whitespace in redirect at beginning
+Passed test redirect output then use normal output
+Passed test custom use normal output
+Passed test redirect input then use normal input
+Passed test redirect output truncates file
+Passed test echo 100 times output
+Passed test echo 100 times exit status
+Passed test 100 output redirections (with limit of 50 open files)
+Passed test 100 input redirections (with limit of 50 open files)
+Passed test 100 pipelines (with limit of 50 open files)
+Passed test redirect to operator is invalid
+Passed test redirect from operator is invalid
