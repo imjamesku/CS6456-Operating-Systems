@@ -1,4 +1,1 @@
-*.o
-output
-uvash
-settings.json
+.vscode/
