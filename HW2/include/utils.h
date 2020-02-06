@@ -9,8 +9,10 @@
  */
 #ifdef DEBUG
     #define DEBUG_ 1
+    #define D(x) x
 #else
     #define DEBUG_ 0
+    #define D(x)
 #endif
 
 #define debug_cond(condition, stream, ...) \
