@@ -80,6 +80,25 @@ void grn_gc() {
 int grn_wait(int condition) {
   UNUSED(condition);
 
+  STATE.current->condition = condition;
+
+  grn_thread* threadToRun = NULL;
+  grn_thread* cur = STATE.current;
+  while ((cur = next_thread(cur)) != STATE.current) {
+    if (cur->status == READY) {
+      threadToRun = cur;
+    }
+  }
+  
+  if (STATE.current->status == RUNNING){
+    STATE.current->status = READY;
+  }
+  if (threadToRun != NULL) {
+    threadToRun->status = RUNNING;
+    STATE.current = threadToRun;
+    return 0;
+  }
+
   // FIXME
   return -1;
 }
@@ -110,7 +129,34 @@ int grn_wait(int condition) {
  */
 int grn_yield(int condition) {
   UNUSED(condition);
-
+  grn_thread* threadToRun = NULL;
+  if (condition) {
+    // STATE.current->condition = 0;
+    grn_thread* cur = STATE.current;
+    while ((cur = next_thread(cur)) != STATE.current) {
+      if (cur->condition == condition && cur->status == READY) {
+        threadToRun = cur;
+      }
+    }
+  }
+  if (threadToRun == NULL) {
+    grn_thread* cur = STATE.current;
+    while ((cur = next_thread(cur)) != STATE.current) {
+      if (cur->status == READY) {
+        threadToRun = cur;
+      }
+    }
+  }
+  
+  if (STATE.current->status == RUNNING){
+    STATE.current->status = READY;
+  }
+  if (threadToRun != NULL) {
+    threadToRun->status = RUNNING;
+    STATE.current = threadToRun;
+    return 0;
+  }
+  
   // FIXME: Yield the current thread's execution time to another READY thread.
   return -1;
 }
