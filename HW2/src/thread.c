@@ -93,9 +93,25 @@ grn_thread *next_thread(grn_thread *thread) {
  */
 grn_thread *grn_new_thread(bool alloc_stack) {
   UNUSED(alloc_stack);
+  grn_thread* newThread = (grn_thread*)malloc(sizeof(grn_thread));
+  newThread->context.r12 = 0;
+  newThread->context.r13 = 0;
+  newThread->context.r14 = 0;
+  newThread->context.r15 = 0;
+  newThread->context.rbp = 0;
+  newThread->context.rbx = 0;
+  newThread->context.rsp = 0;
+  newThread->id = atomic_next_id();
+  newThread->status = WAITING;
+  if (alloc_stack) {
+    newThread->stack = (uint8_t*)malloc(sizeof(uint8_t)*(1<<20)*2);
+  } else {
+    newThread->stack = NULL;
+  }
+  add_thread(newThread);
 
   // FIXME: Allocate a new thread and stack.
-  return NULL;
+  return newThread;
 }
 
 /**
@@ -106,6 +122,9 @@ grn_thread *grn_new_thread(bool alloc_stack) {
  */
 void grn_destroy_thread(grn_thread *thread) {
   UNUSED(thread);
+  remove_thread(thread);
+  free(thread->stack);
+  free(thread);
 
   // FIXME: Free the resources used by `thread`.
 }
