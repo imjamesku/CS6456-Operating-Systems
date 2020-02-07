@@ -44,11 +44,22 @@ void grn_init() {
  *
  * @return The thread ID of the newly spawned process.
  */
+// int return0() {
+//   printf("jjjjjjjjjjjjj");
+//   system("PAUSE");
+//   return 0;
+// }
 int grn_spawn(grn_fn fn) {
   UNUSED(fn);
+  // int i = 1;
+  grn_thread *newThread = grn_new_thread(true);
+  // grn_fn fnPtr = return0;
+  memcpy(newThread->stack, &fn, sizeof(grn_fn));
+  newThread->context.rsp = (uint64_t)newThread->stack;
+  grn_yield(0);
 
   // FIXME: Allocate a new thread, initialize its context, then yield.
-  return 0;
+  return newThread->id;
 }
 
 /**
