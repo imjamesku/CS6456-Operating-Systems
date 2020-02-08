@@ -104,7 +104,7 @@ grn_thread *grn_new_thread(bool alloc_stack) {
   newThread->id = atomic_next_id();
   newThread->status = WAITING;
   if (alloc_stack) {
-    newThread->stack = (uint8_t*)malloc(sizeof(uint8_t)*(1<<20)*2);
+    newThread->stack = (uint8_t*)malloc(STACK_SIZE);
   } else {
     newThread->stack = NULL;
   }
