@@ -46,23 +46,21 @@ void grn_init() {
  */
 int grn_spawn(grn_fn fn) {
   UNUSED(fn);
+  grn_gc();
   grn_thread *newThread = grn_new_thread(true);
   uint8_t *stackPtr = newThread->stack + STACK_SIZE;
 
-  // printf("size of fn: %ld\n", sizeof(fn));
-  stackPtr -= 16;
+  stackPtr -= 8;
   memcpy(stackPtr, &fn, sizeof(fn));
 
   void (*startThreadPointer)(void) = start_thread;
   
-  // printf("size of startThreadPointer: %ld\n", sizeof(startThreadPointer));
-  stackPtr -= 16;
+  stackPtr -= 8;
   memcpy(stackPtr, &startThreadPointer, sizeof(startThreadPointer));
-  
-  
   
 
   newThread->context.rsp = (uint64_t)stackPtr;
+  newThread->status = READY;
   grn_yield(0);
 
   // FIXME: Allocate a new thread, initialize its context, then yield.
@@ -76,6 +74,14 @@ int grn_spawn(grn_fn fn) {
  */
 void grn_gc() {
   // FIXME: Free the memory of zombied threads.
+  grn_thread* cur = STATE.threads;
+  while (cur != NULL) {
+    grn_thread *tmp = cur;
+    cur = cur->next;
+    if (tmp->status == ZOMBIE) {
+      grn_destroy_thread(tmp);
+    }
+  }
 }
 
 /**
@@ -97,23 +103,34 @@ void grn_gc() {
  */
 int grn_wait(int condition) {
   UNUSED(condition);
-
+  // debug_thread_print(grn_current());
   STATE.current->condition = condition;
+  // return grn_yield(0);
 
   grn_thread* threadToRun = NULL;
   grn_thread* cur = STATE.current;
-  while ((cur = next_thread(cur)) != STATE.current) {
+  grn_thread *oldThread;
+  cur = next_thread(STATE.current);
+  while (cur != STATE.current) {
     if (cur->status == READY) {
       threadToRun = cur;
     }
+    cur = next_thread(cur);
   }
   
   if (STATE.current->status == RUNNING){
     STATE.current->status = READY;
   }
   if (threadToRun != NULL) {
-    threadToRun->status = RUNNING;
+    remove_thread(threadToRun);
+    add_thread(threadToRun);
+    
+    oldThread = grn_current();
     STATE.current = threadToRun;
+    threadToRun->status = RUNNING;
+    fprintf(stderr, "123");
+    grn_context_switch(&oldThread->context, &threadToRun->context);
+    
     return 0;
   }
 
@@ -148,35 +165,45 @@ int grn_wait(int condition) {
 int grn_yield(int condition) {
   UNUSED(condition);
   grn_thread* threadToRun = NULL;
-  if (condition) {
+  grn_thread* cur;
+  grn_thread *oldThread;
+  if (condition != 0) {
     // STATE.current->condition = 0;
-    grn_thread* cur = STATE.current;
-    while ((cur = next_thread(cur)) != STATE.current) {
+    cur = next_thread(STATE.current);
+    while (cur != STATE.current) {
       if (cur->condition == condition && cur->status == READY) {
         threadToRun = cur;
       }
+      cur = next_thread(cur);
     }
   }
   if (threadToRun == NULL) {
-    grn_thread* cur = STATE.current;
-    while ((cur = next_thread(cur)) != STATE.current) {
+    cur = next_thread(STATE.current);
+    while (cur!= STATE.current) {
       if (cur->status == READY) {
         threadToRun = cur;
       }
+      cur = next_thread(cur);
     }
   }
   
   if (STATE.current->status == RUNNING){
     STATE.current->status = READY;
   }
+  
   if (threadToRun != NULL) {
+    remove_thread(threadToRun);
+    add_thread(threadToRun);
     threadToRun->status = RUNNING;
+    oldThread = STATE.current;
     STATE.current = threadToRun;
+    grn_context_switch(&oldThread->context, &threadToRun->context);
     return 0;
+  } else {
+    return -1;
   }
   
   // FIXME: Yield the current thread's execution time to another READY thread.
-  return -1;
 }
 
 /**

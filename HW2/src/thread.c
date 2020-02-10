@@ -101,8 +101,10 @@ grn_thread *grn_new_thread(bool alloc_stack) {
   newThread->context.rbp = 0;
   newThread->context.rbx = 0;
   newThread->context.rsp = 0;
+  newThread->next = newThread->prev = NULL;
   newThread->id = atomic_next_id();
   newThread->status = WAITING;
+  newThread->condition = 0;
   if (alloc_stack) {
     newThread->stack = (uint8_t*)malloc(STACK_SIZE);
   } else {
