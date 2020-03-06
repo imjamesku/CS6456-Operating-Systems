@@ -14,6 +14,7 @@ typedef struct superblock_t {
 } superblock_t;
 
 typedef struct inode_t {
+    bool used;
     unsigned int mode;
     unsigned int link_cnt;
     unsigned int uid;

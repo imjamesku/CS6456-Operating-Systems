@@ -4,6 +4,7 @@
 #define BLOCK_COUNT 256 // blocks in the disk
 
 #define NVM_LEN 60000 // bytes of nonvolatile memory available
+#define NVM_BLOCK_COUNT (NVM_LEN / BLOCK_SIZE)
 
 int disk_write(int block_number, char *buffer);
 int disk_read(int block_number, char *buffer);

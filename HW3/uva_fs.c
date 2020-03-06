@@ -20,13 +20,13 @@
     (BLOCK_COUNT /                                                             \
      8) // the number of rows we have in the bitmap. we will have 32 rows.
 
-#define NUM_INODES 100
+#define NUM_INODES 500
 #define ROOTDIR_INODE 0
-#define MAGIC 0xABCD0005
+#define MAGIC 0xdeadbeef
 #define MAX_FILE_SIZE BLOCK_SIZE *((BLOCK_SIZE / sizeof(int)) + 12)
 
 // Allows us to keep track of occupied inodes. 1 = occupied, 0 = not
-int inTableStatus[NUM_INODES];
+// int inTableStatus[NUM_INODES];
 
 inode_t inTable[NUM_INODES];
 file_descriptor fdTable[NUM_INODES];
@@ -52,6 +52,7 @@ void print_inode(int idx) {
 // Sets the values of inode i in the inode table in memory
 void set_inode(int i, int mode, int link_cnt, int uid, int gid, int size,
                int data_ptrs[12], int indirectPointer) {
+    inTable[i].used = true;
     inTable[i].mode = mode;
     inTable[i].link_cnt = link_cnt;
     inTable[i].uid = uid;
@@ -62,11 +63,12 @@ void set_inode(int i, int mode, int link_cnt, int uid, int gid, int size,
         inTable[i].data_ptrs[j] = data_ptrs[j];
     }
 
-    inTableStatus[i] = 1;
+    // inTableStatus[i] = 1;
 }
 
 // The same as set_inode, but instead sets the inode as unused
 void rm_inode(int i) {
+    inTable[i].used = false;
     inTable[i].mode = -1;
     inTable[i].link_cnt = -1;
     inTable[i].uid = -1;
@@ -79,7 +81,7 @@ void rm_inode(int i) {
         inTable[i].data_ptrs[j] = -1;
     }
 
-    inTableStatus[i] = 0;
+    // inTableStatus[i] = 0;
 }
 
 // Initializes file descriptor table
@@ -100,7 +102,7 @@ void init_in_table() {
 void init_super() {
     super.magic = MAGIC;
     super.block_size = BLOCK_SIZE;
-    super.fs_size = NUM_BLOCKS;
+    super.fs_size = BLOCK_COUNT;
     super.inode_table_len = NUM_INODES;
     super.root_dir_inode = ROOTDIR_INODE;
 }
@@ -128,8 +130,8 @@ int first_open_fd() {
 // Returns first available inode, or -1 if none is available
 int first_open_inode() {
     for (int i = 1; i < NUM_INODES; i++) {
-        if (inTableStatus[i] == 0) {
-            inTableStatus[i] = 1;
+        if (inTable[i].used == false) {
+            inTable[i].used = true;
             return i;
         }
     }
@@ -173,17 +175,37 @@ int retrieve_file(char *path) {
     free(buffer);
     return -1;
 }
+int write_block(int address, char *buffer) {
+    // printf("write address: %d\n", address);
+    // printf("byte number: %d\n", address * BLOCK_SIZE);
+    // printf("nvm block count: %d\n", NVM_BLOCK_COUNT);
+    if (address < NVM_BLOCK_COUNT) {
+        nvm_write(address * BLOCK_SIZE, BLOCK_SIZE, buffer);
+    } else {
+        int disk_address = address - NVM_LEN / BLOCK_SIZE;
+        disk_write(disk_address, buffer);
+    }
+}
 
 int write_blocks(int start_address, int nblocks, char *buffer) {
     for (int i = 0; i < nblocks; i++) {
-        disk_write(start_address + i, buffer + i * BLOCK_SIZE);
+        write_block(start_address + i, buffer + i * BLOCK_SIZE);
+    }
+}
+
+int read_block(int address, char *buffer) {
+    if (address < NVM_BLOCK_COUNT) {
+        nvm_read(address * BLOCK_SIZE, BLOCK_SIZE, buffer);
+    } else {
+        int disk_address = address - NVM_LEN / BLOCK_SIZE;
+        disk_read(disk_address, buffer);
     }
 }
 
 int read_blocks(int start_address, int nblocks, void *buffer) {
     char *block_start = (char *)buffer;
     for (int i = 0; i < nblocks; i++) {
-        disk_read(start_address + i, block_start + i * BLOCK_SIZE);
+        read_block(start_address + i, block_start + i * BLOCK_SIZE);
     }
 }
 
@@ -197,15 +219,23 @@ int uva_open(char *filename, bool writeable) {
         return -1;
     }
     if (!mounted) {
+        D(printf("202\n");)
         read_blocks(0, 1, &super);
-        if (super.magic == MAGIC) {
+        D(printf("204\n");)
+        if (super.magic != MAGIC) {
+            D(printf("make fresh\n");)
+            D(fflush(stdout);)
             uva_make_fs(1);
             mounted = true;
         } else {
+            D(printf("make unfresh\n");)
+            D(fflush(stdout);)
             uva_make_fs(0);
             mounted = true;
         }
     }
+    D("mounted successfully\n";)
+    D(fflush(stdout);)
 
     int newFd = first_open_fd();
     if (newFd != -1) {
@@ -285,7 +315,7 @@ int uva_open(char *filename, bool writeable) {
             write_blocks(1, numInodeBlocks, (char *)&inTable);
 
             // Write the inode status to disk
-            write_blocks(1022, 1, (char *)&inTableStatus);
+            // write_blocks(1022, 1, (char *)&inTableStatus);
 
             // Write bitmap to disk
             write_blocks(1023, 1, (char *)&free_bit_map);
@@ -486,7 +516,7 @@ int uva_write(int file_identifier, char *buffer, int length) {
     memcpy((bufferino + startOffset), buffer, toWrite);
 
     // Write the inode status to disk
-    write_blocks(1022, 1, (char *)&inTableStatus);
+    // write_blocks(1022, 1, (char *)&inTableStatus);
 
     // Write the bufferino back to disk
     for (int i = start; i < end; i++) {
@@ -520,7 +550,7 @@ int uva_write(int file_identifier, char *buffer, int length) {
     write_blocks(1, numInodeBlocks, (char *)&inTable);
 
     // Write the inode status to disk
-    write_blocks(1022, 1, (char *)&inTableStatus);
+    // write_blocks(1022, 1, (char *)&inTableStatus);
 
     // Write bitmap to disk
     write_blocks(1023, 1, (char *)&free_bit_map);
@@ -587,7 +617,7 @@ void uva_make_fs(int fresh) {
         free(bufferino);
 
         // Write status of inode table to disk
-        write_blocks(1022, 1, (char *)&inTableStatus);
+        // write_blocks(1022, 1, (char *)&inTableStatus);
 
         // Write bitmap to disk
         write_blocks(1023, 1, (char *)&free_bit_map);
@@ -615,11 +645,11 @@ void uva_make_fs(int fresh) {
         free(bufferino);
 
         // Read the inode table status into memory
-        bufferino = malloc(BLOCK_SIZE);
-        read_blocks(1022, 1, bufferino);
-        memcpy(&inTableStatus, bufferino, sizeof(inTableStatus));
+        // bufferino = malloc(BLOCK_SIZE);
+        // read_blocks(1022, 1, bufferino);
+        // memcpy(&inTableStatus, bufferino, sizeof(inTableStatus));
 
-        free(bufferino);
+        // free(bufferino);
 
         // Read the bitmap into memory
         bufferino = malloc(BLOCK_SIZE);

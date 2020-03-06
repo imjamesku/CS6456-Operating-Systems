@@ -6,7 +6,7 @@
 
 /* constants */
 // how far to loop in array
-#define SIZE (NUM_BLOCKS / 8) // 128
+#define SIZE (NVM_BLOCK_COUNT + BLOCK_COUNT / 8) // 128
 
 /* globals */
 // the actual data. initialize all bits to high

@@ -1,9 +1,8 @@
 #ifndef _INCLUDE_BITMAP_H_
 #define _INCLUDE_BITMAP_H_
 
+#include "storage.h"
 #include <stdint.h>
-
-#define NUM_BLOCKS 1024
 
 /*
  * @short force an index to be set.
