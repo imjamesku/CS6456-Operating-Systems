@@ -26,13 +26,12 @@ typedef struct fileDescriptor {
 
 inode file_list[500];
 fileDescriptor fd_table[NUM_FILES];
-int file_cnt = 0;
 int block = 0;
 bool initialized = false;
 int nvm = 0;
 
 void init_file_list() {
-    for (int i = 0; i < file_cnt; i++) {
+    for (int i = 0; i < NUM_FILES; i++) {
         file_list[i].in_use = false;
         file_list[i].block = -1;
         file_list[i].size = -1;
@@ -55,7 +54,6 @@ void init() {
     // printf("initializing\n");
     init_file_list();
     init_fd_table();
-    file_cnt = 0;
     block = 0;
     nvm = 0;
     initialized = true;
@@ -76,10 +74,6 @@ int get_next_inode_idx() {
         }
     }
 }
-
-int get_next_id() { return file_cnt++; }
-
-int get_next_block() { return block++; }
 
 bool has_block(int block_num, int *block) {
     static int block_used = 0;
