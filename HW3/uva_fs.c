@@ -108,11 +108,10 @@ bool has_space_in_nvm() {
 
 void init() {
     // printf("initializing\n");
-    if (initialized) {
-        return;
-    }
     if (PERSISTANT) {
         read_super_block();
+    } else {
+        super_block.magic = 0x12345678;
     }
     init_file_list();
     init_fd_table();
