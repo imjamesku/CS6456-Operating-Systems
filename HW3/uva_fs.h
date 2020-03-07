@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 #define NUM_FILES 500
+#define MAGIC_NUMBER 0xdeadbeef
 
 // Open a file and return a file identifier.
 int uva_open(char *filename, bool writeable);

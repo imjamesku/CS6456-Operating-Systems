@@ -6,9 +6,17 @@
 #include "storage.h"
 #include "uva_fs.h"
 
+#define PERSISTANT false
+// #define DEBUG
+#ifdef DEBUG
+#define D(x) x
+#else
+#define D(x)
+#endif
+
 enum mode { unspecified, read, write };
 typedef struct inode {
-    char filename[256];
+    char filename[128];
     bool in_use; // Indicates if the inode contains a file
     int block;
     int size; // size in bytes
@@ -24,11 +32,18 @@ typedef struct fileDescriptor {
     int cursor;
 } fileDescriptor;
 
+typedef struct superBlock {
+    int magic;
+    int num_inodes;
+    int disk_cur_block;
+    int nvm_cur_byte;
+} superBlock;
+
+superBlock super_block;
 inode file_list[500];
 fileDescriptor fd_table[NUM_FILES];
-int block = 0;
 bool initialized = false;
-int nvm = 0;
+int block = 0;
 
 void init_file_list() {
     for (int i = 0; i < NUM_FILES; i++) {
@@ -50,12 +65,73 @@ void init_fd_table() {
     }
 }
 
+// Reads inodes from nvm to the global array
+void read_inodes() {
+    int inode_start = nvm_byte_count() - sizeof(super_block) -
+                      sizeof(inode) * super_block.num_inodes;
+    nvm_read(inode_start, sizeof(inode) * super_block.num_inodes,
+             (char *)&file_list);
+}
+
+void write_inodes() {
+    int inode_start = nvm_byte_count() - sizeof(super_block) -
+                      sizeof(inode) * super_block.num_inodes;
+    nvm_write(inode_start, sizeof(inode) * super_block.num_inodes,
+              (char *)&file_list);
+}
+
+// Reads the superblock from nvm
+void read_super_block() {
+    nvm_read(nvm_byte_count() - sizeof(super_block), sizeof(super_block),
+             (char *)&super_block);
+    D(printf("loaded magic: %d\n", super_block.magic);
+      printf("loaded inode count: %d\n", super_block.num_inodes);
+      printf("loaded cur disk block: %d\n", super_block.disk_cur_block);
+      printf("loaded cur nvm: %d\n", super_block.nvm_cur_byte);)
+}
+
+// Writes the super block into nvm
+void write_super_block() {
+    nvm_write(nvm_byte_count() - sizeof(super_block), sizeof(super_block),
+              (char *)&super_block);
+}
+
+bool has_space_in_nvm() {
+    if (PERSISTANT) {
+        return super_block.nvm_cur_byte +
+                   sizeof(inode) * super_block.num_inodes <
+               nvm_byte_count();
+    } else {
+        return super_block.nvm_cur_byte < nvm_byte_count();
+    }
+}
+
 void init() {
     // printf("initializing\n");
+    if (initialized) {
+        return;
+    }
+    if (PERSISTANT) {
+        read_super_block();
+    }
     init_file_list();
     init_fd_table();
-    block = 0;
-    nvm = 0;
+    if (super_block.magic == MAGIC_NUMBER) {
+        printf("already formatted\n");
+        read_inodes();
+
+    } else {
+        // initialize for the first time
+        super_block.magic = MAGIC_NUMBER;
+        super_block.num_inodes = 0;
+
+        super_block.nvm_cur_byte = 0;
+        super_block.disk_cur_block = 0;
+        if (PERSISTANT) {
+            write_super_block();
+        }
+    }
+
     initialized = true;
 }
 
@@ -73,16 +149,6 @@ int get_next_inode_idx() {
             return i;
         }
     }
-}
-
-bool has_block(int block_num, int *block) {
-    static int block_used = 0;
-    if (block_used + block_num > disk_block_count()) {
-        return false;
-    }
-    *block = block_used;
-    block_used += block_num;
-    return true;
 }
 
 int uva_open(char *filename, bool writeable) {
@@ -110,9 +176,16 @@ int uva_open(char *filename, bool writeable) {
         // printf("a new file\n");
         inode_idx = get_next_inode_idx();
         strcpy(file_list[inode_idx].filename, filename);
-        file_list[i].block = -1;
-        file_list[i].size = -1;
-        file_list[i].start_nvm = -1;
+        file_list[inode_idx].block = -1;
+        file_list[inode_idx].size = -1;
+        file_list[inode_idx].start_nvm = -1;
+        file_list[inode_idx].in_use = true;
+
+        super_block.num_inodes++;
+        if (PERSISTANT) {
+            write_super_block();
+            write_inodes();
+        }
         // file_list[f->file_identifier] = f;
     }
     // Set up fd
@@ -244,19 +317,19 @@ int uva_write(int file_identifier, char *buffer, int length) {
     inode *f = &file_list[fd_table[file_identifier].inode_idx];
     int s = 0;
     // see if there are space in nvm
-    if (nvm < nvm_byte_count()) {
+    if (has_space_in_nvm()) {
         // store into nvm
         // printf("write into nvm\n");
-        f->start_nvm = nvm;
-        int space = nvm_byte_count() - nvm;
+        f->start_nvm = super_block.nvm_cur_byte;
+        int space = nvm_byte_count() - super_block.nvm_cur_byte;
         int cnt = 0;
         if (space > length) {
             cnt = length;
         } else {
             cnt = space;
         }
-        if (-1 != nvm_write(nvm, cnt, buffer)) {
-            nvm += cnt;
+        if (-1 != nvm_write(super_block.nvm_cur_byte, cnt, buffer)) {
+            super_block.nvm_cur_byte += cnt;
             f->nvm_size = cnt;
             if (cnt == length) {
                 // printf("nvm is enough.\n");
@@ -272,13 +345,13 @@ int uva_write(int file_identifier, char *buffer, int length) {
     if (length % 512 != 0) {
         block_num++;
     }
-    int block = 0;
-    if (!has_block(block_num, &block)) {
-        // no space for write
+    if (super_block.disk_cur_block + block_num > disk_block_count()) {
+        // no space for this write
         return -1;
     }
     // printf("block %d assigned\n",block);
-    f->block = block;
+    f->block = super_block.disk_cur_block;
+    super_block.disk_cur_block += block_num;
     int size = 0;
     for (int i = f->block; i < f->block + block_num; i++) {
         char buff[512] = {0};
@@ -296,6 +369,11 @@ int uva_write(int file_identifier, char *buffer, int length) {
     }
     // printf("%d byte written.\n",size);
     f->size = size;
+    if (PERSISTANT) {
+        write_super_block();
+        write_inodes();
+    }
+
     return 0;
 }
 
