@@ -90,6 +90,8 @@ bins = np.arange(min_time, max_time, (max_time-min_time)/100)
 print(bins)
 plt.hist(read_times, bins=bins, normed=True, cumulative=True,
          label='CDF', histtype='step', alpha=0.8)
+plt.xlabel('time')
+plt.ylabel('CDF')
 
 plt.show()
 # for read_time in read_times:

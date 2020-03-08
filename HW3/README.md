@@ -1,1 +1,2 @@
-https://www3.nd.edu/~pbui/teaching/cse.30341.fa17/project06.html
+# OS HW3
+To handle the test with 500 files, whose file names, each taking up 128 bytes, would need over 60000 bytes, I made the file system nonpersistent to accommodate for the data. To make the file system persistent, change the constant `PERSISTENT` to true in uva_fs.c
