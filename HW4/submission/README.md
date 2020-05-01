@@ -1,0 +1,3 @@
+# HW4: Mini-Virtualization
+
+In the program, I use `clone` to create a child process to run the python script. With the `CLONE_NEWNET` flag, a new network namespace will be created along with the child process, allowing running 2 copies of `http_recorder` at the same time. To make the webpage accessible from the outside(browser), I need to connect the new namespace to the global namespace with a veth. So I create a veth pair, move one to the child namespace, assign both a network id, and set forwarding so packets will be forwarded to the child via the parent. Finally, I run the python script in both the parent and the child process.
