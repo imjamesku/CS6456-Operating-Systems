@@ -1,0 +1,339 @@
+diff --git a/Makefile b/Makefile
+index a398c5a..c7c38c0 100644
+--- a/Makefile
++++ b/Makefile
+@@ -129,6 +129,8 @@ UPROGS=\
+ 	$U/_usertests\
+ 	$U/_wc\
+ 	$U/_zombie\
++	$U/_test\
++	$U/_test2\
+ 
+ fs.img: mkfs/mkfs README $(UPROGS)
+ 	mkfs/mkfs fs.img README $(UPROGS)
+diff --git a/kernel/defs.h b/kernel/defs.h
+index f893d28..08278be 100644
+--- a/kernel/defs.h
++++ b/kernel/defs.h
+@@ -90,6 +90,7 @@ void            proc_freepagetable(pagetable_t, uint64);
+ int             kill(int);
+ struct cpu*     mycpu(void);
+ struct cpu*     getmycpu(void);
++int             numprocs();
+ struct proc*    myproc();
+ void            procinit(void);
+ void            scheduler(void) __attribute__((noreturn));
+diff --git a/kernel/proc.c b/kernel/proc.c
+index bbf3af0..99f7e58 100644
+--- a/kernel/proc.c
++++ b/kernel/proc.c
+@@ -12,14 +12,127 @@ struct proc proc[NPROC];
+ 
+ struct proc *initproc;
+ 
++char procStartDebugStr[1024] = {0};
++char procExitDebugStr[1024] = {0};
++
++int procCount = 0;
+ int nextpid = 1;
+ struct spinlock pid_lock;
+ 
+ extern void forkret(void);
+ static void wakeup1(struct proc *chan);
++extern void findSubstr(char* fmt, int pid);
+ 
+ extern char trampoline[]; // trampoline.S
++// inline function to swap two numbers
++void
++swap(char *x, char *y)
++{
++	char t = *x; *x = *y; *y = t;
++}
++
++// function to reverse buffer[i..j]
++char*
++reverse(char *buffer, int i, int j)
++{
++	while (i < j)
++		swap(&buffer[i++], &buffer[j--]);
++
++	return buffer;
++}
++
++// Iterative function to implement itoa() function in C
++char*
++itoa(int value, char* buffer, int base)
++{
++	// invalid input
++	if (base < 2 || base > 32)
++		return buffer;
++
++	// consider absolute value of number
++	int n = value;
++
++	int i = 0;
++	while (n)
++	{
++		int r = n % base;
++
++		if (r >= 10)
++			buffer[i++] = 65 + (r - 10);
++		else
++			buffer[i++] = 48 + r;
++
++		n = n / base;
++	}
++
++	// if number is 0
++	if (i == 0)
++		buffer[i++] = '0';
++
++	// If base is 10 and value is negative, the resulting string 
++	// is preceded with a minus sign (-)
++	// With any other base, value is always considered unsigned
++	if (value < 0 && base == 10)
++		buffer[i++] = '-';
++
++	buffer[i] = '\0'; // null terminate string
++
++	// reverse the string and return it
++	return reverse(buffer, 0, i - 1);
++}
+ 
++void
++replace(char* fmt, int n, int start, char* replacement)
++{
++  int i = start, j = start + n, k = 0;
++
++  while(replacement[k] != '\0') {
++    fmt[i] = replacement[k];
++    i++;
++    k++;
++  }
++  while(fmt[j] != '\0') {
++    fmt[i] = fmt[j];
++    i++;
++    j++;
++  }
++  fmt[i] = '\0';
++}
++
++void
++findSubstr(char* fmt, int pid)
++{
++  int i = 0, j = 0, n = 0, start = 0;
++  char str[2][15] = {"{curproc}", "{numprocs}"};
++  for(int k = 0; k < 2; k++) {
++    while(fmt[i] != '\0' && str[k][j] != '\0') {
++      if(fmt[i] != str[k][j]) {
++        i++;
++        j = 0;
++      } else {
++        if(j == 0)
++          start = i;
++        i++;
++        j++;
++      }
++    }
++    if(str[k][j] == '\0') {
++      n = strlen(str[k]);
++      char replacement[10];
++      if(k) {
++        int num = numprocs();
++        itoa(num, replacement, 10);
++      } else {
++        itoa(pid, replacement, 10);
++      }
++      replace(fmt, n, start, replacement);
++    }
++    i = 0;
++    j = 0;
++    start = 0;
++    n = 0;
++  }
++}
+ void
+ procinit(void)
+ {
+@@ -61,6 +174,10 @@ mycpu(void) {
+   return c;
+ }
+ 
++int numprocs(void) {
++  return procCount;
++}
++
+ // Return the current struct proc *, or zero if none.
+ struct proc*
+ myproc(void) {
+@@ -104,6 +221,7 @@ allocproc(void)
+ 
+ found:
+   p->pid = allocpid();
++  procCount++;
+ 
+   // Allocate a trapframe page.
+   if((p->tf = (struct trapframe *)kalloc()) == 0){
+@@ -119,6 +237,11 @@ found:
+   memset(&p->context, 0, sizeof p->context);
+   p->context.ra = (uint64)forkret;
+   p->context.sp = p->kstack + PGSIZE;
++  // char fmt[] = "Process {curproc} (out of {numprocs}) started\n";
++  // strncpy(procStartDebugStr, fmt, strlen(fmt));
++  findSubstr(procStartDebugStr, p->pid);
++  printf(procStartDebugStr);
++  // printf("[debug]%s\n", procStartDebugStr);
+ 
+   return p;
+ }
+@@ -129,6 +252,10 @@ found:
+ static void
+ freeproc(struct proc *p)
+ {
++  // char fmt[] = "Process {curproc} (out of {numprocs}) exited\n";
++  // strncpy(procExitDebugStr, fmt, strlen(fmt));
++  findSubstr(procExitDebugStr, p->pid);
++  printf(procExitDebugStr);
+   if(p->tf)
+     kfree((void*)p->tf);
+   p->tf = 0;
+@@ -143,6 +270,7 @@ freeproc(struct proc *p)
+   p->killed = 0;
+   p->xstate = 0;
+   p->state = UNUSED;
++  procCount--;
+ }
+ 
+ // Create a page table for a given process,
+diff --git a/kernel/proc.h b/kernel/proc.h
+index 538b48a..3c552a2 100644
+--- a/kernel/proc.h
++++ b/kernel/proc.h
+@@ -104,3 +104,7 @@ struct proc {
+   struct inode *cwd;           // Current directory
+   char name[16];               // Process name (debugging)
+ };
++
++extern char procStartDebugStr[];
++extern char procExitDebugStr[];
++extern char openCalledDebugStr[];
+\ No newline at end of file
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index 2817e44..c497304 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -6,7 +6,9 @@
+ #include "proc.h"
+ #include "syscall.h"
+ #include "defs.h"
++extern void findSubstr(char* fmt, int pid);
+ 
++char openCalledDebugStr[1024] = {0};
+ // Fetch the uint64 at addr from the current process.
+ int
+ fetchaddr(uint64 addr, uint64 *ip)
+@@ -104,6 +106,7 @@ extern uint64 sys_unlink(void);
+ extern uint64 sys_wait(void);
+ extern uint64 sys_write(void);
+ extern uint64 sys_uptime(void);
++extern uint64 sys_debug(void);
+ 
+ static uint64 (*syscalls[])(void) = {
+ [SYS_fork]    sys_fork,
+@@ -127,6 +130,7 @@ static uint64 (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_debug]   sys_debug,
+ };
+ 
+ void
+@@ -137,6 +141,12 @@ syscall(void)
+ 
+   num = p->tf->a7;
+   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
++    if (num == 15) {
++      // char fmt[] = "Process {curproc} called open().\n";
++      // strncpy(openCalledDebugStr, fmt, strlen(fmt));
++      findSubstr(openCalledDebugStr, p->pid);
++      printf(openCalledDebugStr);
++    }
+     p->tf->a0 = syscalls[num]();
+   } else {
+     printf("%d %s: unknown sys call %d\n",
+diff --git a/kernel/syscall.h b/kernel/syscall.h
+index bc5f356..9db3921 100644
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -20,3 +20,4 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_debug  22
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index e8bcda9..fde285c 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -95,3 +95,37 @@ sys_uptime(void)
+   release(&tickslock);
+   return xticks;
+ }
++
++// hookpoint
++// 0: start
++// 1: end
++// 2: open
++uint64
++sys_debug(void)
++{
++  char msg[1024] = {0};
++  int hookPoint = 0;
++
++  argstr(0, msg, 1024);
++  argint(1, &hookPoint);
++  // printf("addr: %x\n", msg);
++  // printf("val: %s\n", msg);
++  if (hookPoint == 0) {
++  memset(procStartDebugStr, 0, 1024);
++  strncpy(procStartDebugStr, msg, strlen(msg));
++  // printf("work?%s\n", procStartDebugStr);
++  // printf("msg: %s", msg);
++  // printf("len: %d", strlen(msg));
++  }
++  if (hookPoint == 1) {
++    memset(procExitDebugStr, 0, 1024);
++    strncpy(procExitDebugStr, msg, strlen(msg));
++    // printf("hook1\n");
++  }
++  if (hookPoint == 2) {
++    memset(openCalledDebugStr, 0, 1024);
++    strncpy(openCalledDebugStr, msg, strlen(msg));
++    // printf("hook2\n");
++  }
++  return 0;
++}
+diff --git a/user/user.h b/user/user.h
+index 03af731..8988307 100644
+--- a/user/user.h
++++ b/user/user.h
+@@ -23,6 +23,11 @@ int getpid(void);
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++// hookpoint
++// 0: start
++// 1: end
++// 2: open
++int debug(const char*, int);
+ 
+ // ulib.c
+ int stat(const char*, struct stat*);
+diff --git a/user/usys.pl b/user/usys.pl
+index 01e426e..ded1843 100755
+--- a/user/usys.pl
++++ b/user/usys.pl
+@@ -36,3 +36,4 @@ entry("getpid");
+ entry("sbrk");
+ entry("sleep");
+ entry("uptime");
++entry("debug");
